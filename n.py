@@ -5,6 +5,7 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aioschedule import run_pending
 from datetime import datetime
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+import sqlite3
 from config import token
 
 logging.basicConfig(level=logging.INFO)
@@ -40,6 +41,14 @@ async def handle_text(message: types.Message):
     time = text[1].strip()
 
     user_id = message.from_user.id
+
+
+    conn = sqlite3.connect('tasks.db')
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO tasks (user_id, title, time) VALUES (?, ?, ?)", (user_id, title, time))
+    conn.commit()
+    conn.close()
+
     if user_id not in user_tasks:
         user_tasks[user_id] = []
 
@@ -74,6 +83,13 @@ async def handle_inline_callback(callback_query: types.CallbackQuery):
         if 0 <= task_index < len(tasks):
             tasks.pop(task_index)
 
+
+            conn = sqlite3.connect('tasks.db')
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM tasks WHERE user_id = ? AND rowid = ?", (user_id, task_index + 1))
+            conn.commit()
+            conn.close()
+
     await bot.answer_callback_query(callback_query.id, text="Задача удалена")
     await bot.edit_message_text("Задача удалена", user_id, callback_query.message.message_id,
                                 reply_markup=create_inline_keyboard(user_id))
@@ -104,13 +120,20 @@ async def scheduler():
 
 
 async def main():
-    # Запуск планировщика
+
+    conn = sqlite3.connect('tasks.db')
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS tasks
+                      (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, title TEXT, time TEXT)''')
+    conn.commit()
+    conn.close()
+
+
     asyncio.create_task(scheduler())
 
-    # Запуск бота
+
     await dp.start_polling()
 
 
 if __name__ == '__main__':
     asyncio.run(main())
-
